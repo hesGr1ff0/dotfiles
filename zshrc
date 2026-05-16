@@ -32,7 +32,7 @@ alias gp='git push'
 alias gl='git log --oneline --graph --decorate -20'
 
 # Quick navigation
-alias code='cd ~/code'
+alias cdc='cd ~/code'
 alias summer='cd ~/code/summer-2026'
 alias dots='cd ~/code/dotfiles'
 
