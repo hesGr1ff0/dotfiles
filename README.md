@@ -1,4 +1,4 @@
-#dotfiles
+# dotfiles
 
 Personal Configuration for macOS. Shell (zsh), tmux, Neovim.
 
@@ -6,7 +6,7 @@ Personal Configuration for macOS. Shell (zsh), tmux, Neovim.
 
 
 ```sh
-git clone https://github.com/YOURUSERNAME/dotfiles.git ~/code/dotfiles
+git clone https://github.com/hesGr1ff0/dotfiles.git ~/code/dotfiles
 cd ~/code/dotfiles
 ln -sf ~/code/dotfiles/zshrc ~/.zshrc
 ln -sf ~/code/dotfiles/tmux.conf ~/.tmux.conf
