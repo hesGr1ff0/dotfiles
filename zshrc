@@ -46,3 +46,6 @@ PROMPT='%F{cyan}%~%f%F{yellow}${vcs_info_msg_0_}%f $ '
 # Better tab completion
 autoload -Uz compinit && compinit
 zstyle ':completion:*' menu select
+
+# Projects
+export PROJECTS_DIR="$HOME/Desktop/github"

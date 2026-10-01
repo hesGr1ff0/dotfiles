@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+# newproject: create a portfolio repository with the standard structure.
+#
+# Usage:
+#   newproject [options] <name> "<description>" [topic1,topic2,...]
+#
+# Options:
+#   --private     Create the GitHub repository as private (default: public)
+#   --no-github   Create the project locally only; do not create a GitHub repository
+#   --no-venv     Do not create a virtual environment or install packages
+#   -h, --help    Show this help
+#
+# Environment variables (optional):
+#   PROJECTS_DIR     Parent folder for new projects (default: ~/code)
+#   PROJECT_AUTHOR   Name used in the licence (default: Griffin Makari)
+
+set -euo pipefail
+shopt -u patsub_replacement 2>/dev/null || true  # treat "&" literally in replacements
+
+VISIBILITY="--public"
+USE_GITHUB=1
+USE_VENV=1
+PROJECTS_DIR="${PROJECTS_DIR:-$HOME/code}"
+AUTHOR="${PROJECT_AUTHOR:-Griffin Makari}"
+YEAR="$(date +%Y)"
+OWNER="hesGr1ff0"
+
+usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; }
+fail() { echo "newproject: $*" >&2; exit 1; }
+step() { printf '\n==> %s\n' "$*"; }
+
+# ---------------------------------------------------------------- arguments
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    --private)   VISIBILITY="--private" ;;
+    --no-github) USE_GITHUB=0 ;;
+    --no-venv)   USE_VENV=0 ;;
+    -h|--help)   usage; exit 0 ;;
+    *)           fail "unknown option '$1' (see newproject --help)" ;;
+  esac
+  shift
+done
+
+[[ $# -ge 2 ]] || { usage; exit 1; }
+NAME="$1"
+DESCRIPTION="$2"
+TOPICS="${3:-}"
+TARGET="$PROJECTS_DIR/$NAME"
+
+[[ "$NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]] \
+  || fail "name must use lowercase letters, digits, and hyphens only (e.g. benford-forensics)"
+[[ -e "$TARGET" ]] && fail "$TARGET already exists"
+command -v git >/dev/null || fail "git is not installed"
+command -v python3 >/dev/null || fail "python3 is not installed"
+
+if [[ $USE_GITHUB -eq 1 ]]; then
+  command -v gh >/dev/null || fail "gh is not installed (or use --no-github)"
+  gh auth status >/dev/null 2>&1 || fail "gh is not authenticated; run: gh auth login"
+  OWNER="$(gh api user --jq .login)"
+  if gh repo view "$OWNER/$NAME" >/dev/null 2>&1; then
+    fail "a GitHub repository named $OWNER/$NAME already exists"
+  fi
+fi
+
+# fill: replace __NAME__, __DESCRIPTION__, __OWNER__, __YEAR__, __AUTHOR__
+fill() {
+  local text="$1"
+  text="${text//__NAME__/$NAME}"
+  text="${text//__DESCRIPTION__/$DESCRIPTION}"
+  text="${text//__OWNER__/$OWNER}"
+  text="${text//__YEAR__/$YEAR}"
+  text="${text//__AUTHOR__/$AUTHOR}"
+  printf '%s\n' "$text"
+}
+
+# ---------------------------------------------------------------- structure
+step "Creating $TARGET"
+mkdir -p "$TARGET"/{data,notebooks,src,scripts,reports/figures}
+cd "$TARGET"
+touch reports/figures/.gitkeep
+
+fill "$(cat <<'EOF'
+# __NAME__
+
+__DESCRIPTION__
+
+## Problem
+
+_Why this problem matters in financial crime, in two or three sentences._
+
+## Data
+
+- **Source:**
+- **Licence:**
+- **Size and class balance:**
+- **How to obtain:** run `python scripts/download_data.py`. Files are written to `data/`, which is excluded from version control.
+
+## Method
+
+_The approach, with the key mathematical idea stated explicitly._
+
+## Results
+
+_A small results table and one or two figures from `reports/figures/`._
+
+## Limitations
+
+_What the analysis cannot show, and how the result might fail in a real institution._
+
+## Reproduction
+
+```bash
+git clone https://github.com/__OWNER__/__NAME__.git
+cd __NAME__
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/download_data.py
+```
+
+Then run the notebooks in `notebooks/` in numerical order.
+
+## References
+
+EOF
+)" > README.md
+
+fill "$(cat <<'EOF'
+MIT License
+
+Copyright (c) __YEAR__ __AUTHOR__
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+EOF
+)" > LICENSE
+
+cat > .gitignore <<'EOF'
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.ipynb_checkpoints/
+
+# Environment files and credentials
+.env
+.env.*
+kaggle.json
+access_token
+
+# Data (downloaded by scripts/download_data.py; never committed)
+data/*
+!data/README.md
+*.zip
+
+# Operating system and editors
+.DS_Store
+.idea/
+.vscode/
+EOF
+
+cat > data/README.md <<'EOF'
+# Data
+
+Raw data are not committed to this repository. To obtain them, run
+
+```bash
+python scripts/download_data.py
+```
+
+from the project root. The files are written to this folder.
+EOF
+
+cat > requirements.txt <<'EOF'
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+jupyter
+kaggle
+EOF
+
+cat > scripts/download_data.py <<'EOF'
+"""Download this project's raw data into data/.
+
+Set DATASET to the Kaggle identifier (owner/dataset-name), or replace the
+body of main() if the data come from another source.
+"""
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATASET = ""  # for example: "mlg-ulb/creditcardfraud"
+
+
+def main() -> None:
+    if not DATASET:
+        raise SystemExit("Set DATASET in scripts/download_data.py first.")
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
+    DATA_DIR.mkdir(exist_ok=True)
+    api = KaggleApi()
+    api.authenticate()
+    api.dataset_download_files(DATASET, path=str(DATA_DIR), unzip=True)
+    print(f"Dataset downloaded to {DATA_DIR}")
+
+
+if __name__ == "__main__":
+    main()
+EOF
+
+cat > src/__init__.py <<'EOF'
+"""Reusable functions for this project, imported by the notebooks."""
+EOF
+
+python3 - <<'EOF'
+import json
+setup = (
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "# Make the project root importable, so that `from src import ...` works.\n"
+    "sys.path.insert(0, str(Path.cwd().parent))"
+)
+for number, title in [("01", "Exploration"), ("02", "Modelling"), ("03", "Evaluation")]:
+    notebook = {
+        "cells": [
+            {"cell_type": "markdown", "metadata": {}, "source": [f"# {number}. {title}"]},
+            {"cell_type": "code", "metadata": {}, "execution_count": None,
+             "outputs": [], "source": setup},
+        ],
+        "metadata": {"kernelspec": {"name": "python3", "display_name": "Python 3",
+                                    "language": "python"}},
+        "nbformat": 4,
+        "nbformat_minor": 4,
+    }
+    path = f"notebooks/{number}_{title.lower()}.ipynb"
+    with open(path, "w") as f:
+        json.dump(notebook, f, indent=1)
+        f.write("\n")
+EOF
+
+# ---------------------------------------------------------------- environment
+if [[ $USE_VENV -eq 1 ]]; then
+  step "Creating virtual environment and installing packages (this may take a few minutes)"
+  python3 -m venv .venv
+  .venv/bin/python -m pip install --quiet --upgrade pip
+  .venv/bin/python -m pip install --quiet -r requirements.txt
+  # Pin the top-level packages to the versions actually installed.
+  .venv/bin/python - <<'EOF'
+from importlib.metadata import version
+names = [line.strip() for line in open("requirements.txt")
+         if line.strip() and not line.startswith("#")]
+with open("requirements.txt", "w") as f:
+    f.writelines(f"{name}=={version(name)}\n" for name in names)
+EOF
+fi
+
+# ---------------------------------------------------------------- git and GitHub
+step "Initialising Git repository"
+git init --quiet -b main
+git add -A
+git commit --quiet -m "Create standard project structure"
+
+if [[ $USE_GITHUB -eq 1 ]]; then
+  step "Creating GitHub repository $OWNER/$NAME"
+  gh repo create "$NAME" "$VISIBILITY" --description "$DESCRIPTION" \
+    --source . --remote origin --push
+  if [[ -n "$TOPICS" ]]; then
+    gh repo edit "$OWNER/$NAME" --add-topic "$TOPICS"
+  fi
+fi
+
+# ---------------------------------------------------------------- summary
+step "Done: $TARGET"
+cat <<EOF
+
+Next steps:
+  cd $TARGET
+EOF
+[[ $USE_VENV -eq 1 ]] && echo "  source .venv/bin/activate"
+cat <<'EOF'
+  Set DATASET in scripts/download_data.py, then run: python scripts/download_data.py
+  Fill in each section of README.md as the project progresses.
+EOF
